@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dự Báo Thời Tiết Pro - Phiên Bản Tiếng Việt</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+    
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+    
+    /* Custom animations */
+    @keyframes float {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-10px); }
+    }
+    
+    @keyframes glow {
+      0%, 100% { opacity: 0.7; }
+      50% { opacity: 1; }
+    }
+    
+    .animate-float {
+      animation: float 3s ease-in-out infinite;
+    }
+    
+    .animate-glow {
+      animation: glow 2s ease-in-out infinite;
+    }
+    
+    /* Glass morphism effect */
+    .glass {
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+    
+    /* Custom scrollbar for suggestions */
+    #citySuggestions::-webkit-scrollbar {
+      width: 4px;
+    }
+    
+    #citySuggestions::-webkit-scrollbar-track {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 4px;
+    }
+    
+    #citySuggestions::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.3);
+      border-radius: 4px;
+    }
+    
+    #citySuggestions::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.5);
+    }
+    
+    /* Loading animation */
+    .loading-spinner {
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-radius: 50%;
+      border-top: 2px solid white;
+      width: 20px;
+      height: 20px;
+      animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body class="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 text-white relative overflow-hidden">
+  <!-- Animated background elements -->
+  <div class="absolute inset-0 overflow-hidden">
+    <div class="absolute -top-40 -right-40 w-80 h-80 bg-blue-400 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-pulse"></div>
+    <div class="absolute -bottom-40 -left-40 w-80 h-80 bg-purple-400 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-pulse delay-1000"></div>
+    <div class="absolute top-40 left-1/2 w-80 h-80 bg-pink-400 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-pulse delay-500"></div>
+  </div>
+  
+  <div class="relative z-10 bg-white/10 backdrop-blur-2xl rounded-3xl shadow-2xl p-8 max-w-md w-full border border-white/20 hover:shadow-3xl transition-all duration-500">
+    <h1 class="text-3xl font-bold mb-8 text-center bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent animate-pulse">
+      ⛅ Dự Báo Thời Tiết Pro
+    </h1>
+    
+    <!-- Search by city name -->
+    <div class="relative mb-6">
+      <div class="flex gap-3">
+        <div class="relative flex-1">
+          <input id="cityInput" type="text" placeholder="🔍 Tìm kiếm thành phố..." 
+                 class="w-full p-4 rounded-2xl bg-white/20 border-2 border-white/30 focus:outline-none focus:border-blue-400 focus:bg-white/30 transition-all duration-300 text-white placeholder-white/70 backdrop-blur-xl shadow-lg" 
+                 autocomplete="off" />
+          <div class="absolute inset-0 rounded-2xl bg-gradient-to-r from-blue-500/20 to-purple-500/20 pointer-events-none opacity-0 transition-opacity duration-300" id="inputGlow"></div>
+        </div>
+        <button id="searchBtn" class="px-6 py-4 rounded-2xl bg-gradient-to-r from-blue-500 to-purple-600 text-white font-semibold hover:from-blue-600 hover:to-purple-700 active:scale-95 transform transition-all duration-200 shadow-lg hover:shadow-xl">
+          <span class="hidden sm:inline">Tìm kiếm</span>
+          <span class="sm:hidden">🔍</span>
+        </button>
+        <button id="locationBtn" class="px-4 py-4 rounded-2xl bg-gradient-to-r from-green-500 to-teal-600 text-white font-semibold hover:from-green-600 hover:to-teal-700 active:scale-95 transform transition-all duration-200 shadow-lg hover:shadow-xl" title="Sử dụng vị trí hiện tại">
+          📍
+        </button>
+      </div>
+      <!-- City suggestions dropdown -->
+      <div id="citySuggestions" class="absolute top-full left-0 right-0 bg-white/15 backdrop-blur-xl border border-white/30 rounded-2xl shadow-2xl mt-2 max-h-60 overflow-y-auto z-50 hidden">
+      </div>
+    </div>
+    
+    <!-- Loading indicator -->
+    <div id="loadingIndicator" class="hidden text-center py-4">
+      <div class="loading-spinner mx-auto mb-2"></div>
+      <p class="text-white/80">🌤️ Đang tải dữ liệu thời tiết...</p>
+    </div>
+    
+    <!-- Weather card -->
+    <div id="weatherCard" class="hidden">
+      <div class="bg-gradient-to-br from-blue-500/30 to-purple-600/30 backdrop-blur-xl rounded-3xl p-6 border border-white/30 shadow-2xl hover:shadow-3xl transition-all duration-500 transform hover:scale-[1.02]">
+        <div class="flex flex-col items-center gap-4">
+          <div class="relative">
+            <img id="weatherIcon" alt="biểu tượng thời tiết" class="w-28 h-28 drop-shadow-2xl animate-bounce" />
+            <div class="absolute inset-0 bg-gradient-to-br from-yellow-400/20 to-orange-500/20 rounded-full blur-xl"></div>
+          </div>
+          
+          <div class="text-center">
+            <h2 id="location" class="text-2xl font-bold text-white mb-2 drop-shadow-lg"></h2>
+            <p id="description" class="capitalize text-white/90 font-medium text-lg mb-4"></p>
+          </div>
+          
+          <div class="text-center">
+            <div class="text-6xl font-bold bg-gradient-to-r from-yellow-400 to-orange-500 bg-clip-text text-transparent drop-shadow-lg mb-2">
+              <span id="temp"></span><span class="text-4xl">°C</span>
+            </div>
+            <div class="text-lg text-white/80 font-medium">
+              Cảm giác như: <span id="feelsLike" class="font-bold"></span>°C
+            </div>
+          </div>
+          
+          <div class="grid grid-cols-2 gap-4 w-full">
+            <div class="flex flex-col items-center p-3 bg-white/20 rounded-2xl backdrop-blur-sm border border-white/30">
+              <div class="text-2xl mb-1">💧</div>
+              <div class="text-sm text-white/80">Độ Ẩm</div>
+              <div class="font-bold text-white"><span id="humidity"></span>%</div>
+            </div>
+            <div class="flex flex-col items-center p-3 bg-white/20 rounded-2xl backdrop-blur-sm border border-white/30">
+              <div class="text-2xl mb-1">💨</div>
+              <div class="text-sm text-white/80">Gió</div>
+              <div class="font-bold text-white"><span id="wind"></span> m/s</div>
+            </div>
+            <div class="flex flex-col items-center p-3 bg-white/20 rounded-2xl backdrop-blur-sm border border-white/30">
+              <div class="text-2xl mb-1">👁️</div>
+              <div class="text-sm text-white/80">Tầm Nhìn</div>
+              <div class="font-bold text-white"><span id="visibility"></span> km</div>
+            </div>
+            <div class="flex flex-col items-center p-3 bg-white/20 rounded-2xl backdrop-blur-sm border border-white/30">
+              <div class="text-2xl mb-1">🌡️</div>
+              <div class="text-sm text-white/80">Áp Suất</div>
+              <div class="font-bold text-white"><span id="pressure"></span> hPa</div>
+            </div>
+          </div>
+          
+          <div class="w-full bg-white/20 rounded-2xl p-4 backdrop-blur-sm border border-white/30">
+            <div class="flex justify-between items-center mb-2">
+              <span class="text-white/80">🌅 Mặt trời mọc:</span>
+              <span class="font-bold text-white" id="sunrise"></span>
+            </div>
+            <div class="flex justify-between items-center">
+              <span class="text-white/80">🌇 Mặt trời lặn:</span>
+              <span class="font-bold text-white" id="sunset"></span>
+            </div>
+          </div>
+          
+          <p id="lastUpdate" class="text-xs text-white/70 mt-4 font-medium"></p>
+        </div>
+      </div>
+    </div>
+
+    <div id="errorMsg" class="text-red-300 text-center mt-6 p-4 bg-red-500/20 rounded-2xl border border-red-400/30 backdrop-blur-xl hidden"></div>
+    
+    <!-- Debug info -->
+    <div id="debugInfo" class="mt-4 p-3 bg-gray-800/50 rounded-lg text-xs text-gray-300 hidden">
+      <div>Tên đã chọn: <span id="debugSelected"></span></div>
+      <div>Tên từ API: <span id="debugAPI"></span></div>
+    </div>
+    
+    <p class="text-sm text-center mb-6 text-white/80">✨ Thử nhập: Nha Trang, Đà Nẵng, Hồ Chí Minh... hoặc cho phép truy cập vị trí</p>
+  </div>
+
+  <script>
+    // ======= CẤU HÌNH =======
+    const apiKey = "30356bf69782483aa1c37becfb682168"; // API key của bạn
+    // =======================
+
+    // Bảng dịch mô tả thời tiết từ tiếng Anh sang tiếng Việt
+    const weatherDescriptions = {
+      // Clear sky
+      "clear sky": "trời quang đãng",
+      "clear": "quang đãng",
+      
+      // Clouds
+      "few clouds": "ít mây",
+      "scattered clouds": "mây rải rác",
+      "broken clouds": "mây cụm",
+      "overcast clouds": "mây che phủ",
+      "partly cloudy": "có mây",
+      "mostly cloudy": "nhiều mây",
+      "cloudy": "mây",
+      
+      // Rain
+      "light rain": "mưa nhẹ",
+      "moderate rain": "mưa vừa",
+      "heavy intensity rain": "mưa to",
+      "very heavy rain": "mưa rất to",
+      "extreme rain": "mưa cực to",
+      "freezing rain": "mưa đá nhỏ",
+      "light intensity shower rain": "mưa rào nhẹ",
+      "shower rain": "mưa rào",
+      "heavy intensity shower rain": "mưa rào to",
+      "ragged shower rain": "mưa rào không đều",
+      "rain": "mưa",
+      "drizzle": "mưa phùn",
+      "heavy shower rain and drizzle": "mưa rào to và mưa phùn",
+      "shower drizzle": "mưa phùn rào",
+      
+      // Thunderstorm
+      "thunderstorm with light rain": "dông với mưa nhẹ",
+      "thunderstorm with rain": "dông có mưa",
+      "thunderstorm with heavy rain": "dông có mưa to",
+      "light thunderstorm": "dông nhẹ",
+      "thunderstorm": "dông",
+      "heavy thunderstorm": "dông mạnh",
+      "ragged thunderstorm": "dông không đều",
+      "thunderstorm with light drizzle": "dông với mưa phùn nhẹ",
+      "thunderstorm with drizzle": "dông với mưa phùn",
+      "thunderstorm with heavy drizzle": "dông với mưa phùn to",
+      
+      // Snow
+      "light snow": "tuyết nhẹ",
+      "snow": "tuyết",
+      "heavy snow": "tuyết to",
+      "sleet": "mưa tuyết",
+      "light shower sleet": "mưa tuyết nhẹ",
+      "shower sleet": "mưa tuyết rào",
+      "light rain and snow": "mưa nhẹ và tuyết",
+      "rain and snow": "mưa và tuyết",
+      "light shower snow": "tuyết rào nhẹ",
+      "shower snow": "tuyết rào",
+      "heavy shower snow": "tuyết rào to",
+      
+      // Atmosphere
+      "mist": "sương mù",
+      "smoke": "khói",
+      "haze": "sương khô",
+      "sand/dust whirls": "cát/bụi xoáy",
+      "fog": "sương đặc",
+      "sand": "cát",
+      "dust": "bụi",
+      "volcanic ash": "tro núi lửa",
+      "squalls": "gió giật",
+      "tornado": "lốc xoáy"
+    };
+
+    // Các phần tử DOM
+    const weatherCard = document.getElementById("weatherCard");
+    const cityInput = document.getElementById("cityInput");
+    const searchBtn = document.getElementById("searchBtn");
+    const locationBtn = document.getElementById("locationBtn");
+    const errorMsg = document.getElementById("errorMsg");
+    const citySuggestions = document.getElementById("citySuggestions");
+    const loadingIndicator = document.getElementById("loadingIndicator");
+
+    const iconEl = document.getElementById("weatherIcon");
+    const locEl = document.getElementById("location");
+    const descEl = document.getElementById("description");
+    const tempEl = document.getElementById("temp");
+    const feelsLikeEl = document.getElementById("feelsLike");
+    const humidityEl = document.getElementById("humidity");
+    const windEl = document.getElementById("wind");
+    const visibilityEl = document.getElementById("visibility");
+    const pressureEl = document.getElementById("pressure");
+    const sunriseEl = document.getElementById("sunrise");
+    const sunsetEl = document.getElementById("sunset");
+    const lastUpdEl = document.getElementById("lastUpdate");
+
+    // Debug elements
+    const debugInfo = document.getElementById("debugInfo");
+    const debugSelected = document.getElementById("debugSelected");
+    const debugAPI = document.getElementById("debugAPI");
+
+    let currentLat = null,
+        currentLon = null,
+        debounceTimer = null,
+        selectedCityName = null; // Lưu tên thành phố người dùng chọn
+
+    // Bật chế độ debug bằng cách thêm ?debug=1 vào URL
+    const isDebugMode = new URLSearchParams(window.location.search).get('debug') === '1';
+    if (isDebugMode) {
+      debugInfo.classList.remove('hidden');
+    }
+
+    // Hiển thị/ẩn loading
+    function showLoading() {
+      loadingIndicator.classList.remove('hidden');
+      weatherCard.classList.add('hidden');
+      errorMsg.classList.add('hidden');
+    }
+
+    function hideLoading() {
+      loadingIndicator.classList.add('hidden');
+    }
+
+    // Dịch mô tả thời tiết sang tiếng Việt
+    function translateWeatherDescription(description) {
+      const lowercaseDesc = description.toLowerCase();
+      return weatherDescriptions[lowercaseDesc] || description;
+    }
+
+    // Định dạng thời gian
+    function formatTime(timestamp) {
+      return new Date(timestamp * 1000).toLocaleTimeString('vi-VN', {
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    }
+
+    // Lấy dữ liệu thời tiết theo tọa độ
+    async function fetchWeather(lat, lon) {
+      try {
+        showLoading();
+        const r = await fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${apiKey}&units=metric&lang=vi`);
+        if (!r.ok) {
+          if (r.status === 401) {
+            throw new Error("❌ API key không hợp lệ. Vui lòng kiểm tra lại API key OpenWeatherMap của bạn.");
+          }
+          throw new Error("🌤️ Không thể lấy dữ liệu thời tiết. Vui lòng thử lại sau.");
+        }
+        const data = await r.json();
+        updateUI(data);
+      } catch (err) {
+        displayError(err.message);
+      } finally {
+        hideLoading();
+      }
+    }
+
+    // Lấy dữ liệu thời tiết theo tên thành phố
+    async function fetchWeatherByCity(city) {
+      try {
+        showLoading();
+        // Đầu tiên, sử dụng geocoding để tìm thành phố và lấy tọa độ chính xác
+        const geoResponse = await fetch(`https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(city)}&limit=1&appid=${apiKey}`);
+        
+        if (!geoResponse.ok) {
+          if (geoResponse.status === 401) {
+            throw new Error("❌ API key không hợp lệ. Vui lòng kiểm tra lại API key OpenWeatherMap của bạn.");
+          }
+          throw new Error("🌐 Không thể tìm thấy vị trí thành phố. Vui lòng kiểm tra kết nối mạng.");
+        }
+        
+        const geoData = await geoResponse.json();
+        if (geoData.length === 0) {
+          throw new Error(`🏙️ Không tìm thấy thành phố "${city}". Vui lòng kiểm tra chính tả hoặc chọn từ gợi ý.`);
+        }
+        
+        const { lat, lon, name, country, state } = geoData[0];
+        // Lưu tên thành phố chính xác từ dữ liệu geocoding
+        selectedCityName = state ? `${name}, ${state}, ${country}` : `${name}, ${country}`;
+        
+        if (isDebugMode) {
+          debugSelected.textContent = selectedCityName;
+        }
+        
+        await fetchWeather(lat, lon);
+      } catch (err) {
+        displayError(err.message);
+        hideLoading();
+      }
+    }
+
+    // Tìm kiếm thành phố sử dụng OpenWeatherMap Geocoding API
+    async function searchCities(query) {
+      if (!query || query.length < 2) {
+        citySuggestions.classList.add("hidden");
+        return;
+      }
+      
+      try {
+        const response = await fetch(`https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(query)}&limit=5&appid=${apiKey}`);
+        
+        if (!response.ok) {
+          if (response.status === 401) {
+            throw new Error("API key không hợp lệ. Vui lòng kiểm tra lại API key OpenWeatherMap của bạn.");
+          }
+          throw new Error("Không thể tìm kiếm thành phố");
+        }
+        
+        const cities = await response.json();
+        displayCitySuggestions(cities);
+      } catch (err) {
+        console.error("Lỗi tìm kiếm thành phố:", err);
+        citySuggestions.classList.add("hidden");
+        if (err.message.includes("API key")) {
+          displayError(err.message);
+        }
+      }
+    }
+
+    // Hiển thị gợi ý thành phố với giao diện cải tiến
+    function displayCitySuggestions(cities) {
+      citySuggestions.innerHTML = "";
+      
+      if (cities.length === 0) {
+        citySuggestions.innerHTML = '<div class="p-4 text-white/70 text-sm text-center">🔍 Không tìm thấy thành phố nào</div>';
+        citySuggestions.classList.remove("hidden");
+        return;
+      }
+
+      cities.forEach((city, index) => {
+        const cityElement = document.createElement("div");
+        cityElement.className = "p-4 hover:bg-white/20 cursor-pointer border-b border-white/20 last:border-b-0 transition-all duration-300 hover:backdrop-blur-xl group";
+        
+        const cityName = city.local_names && city.local_names.vi ? city.local_names.vi : 
+                        (city.local_names && city.local_names.en ? city.local_names.en : city.name);
+        const countryName = city.country;
+        const stateName = city.state ? `, ${city.state}` : "";
+        
+        cityElement.innerHTML = `
+          <div class="flex items-center justify-between">
+            <div>
+              <div class="font-semibold text-white group-hover:text-blue-300 transition-colors">${cityName}</div>
+              <div class="text-sm text-white/70">📍 ${countryName}${stateName}</div>
+            </div>
+            <div class="text-xs text-white/50 bg-white/10 px-2 py-1 rounded-full">${index + 1}</div>
+          </div>
+        `;
+        
+        cityElement.addEventListener("click", () => {
+          const displayName = stateName ? `${cityName}${stateName}, ${countryName}` : `${cityName}, ${countryName}`;
+          cityInput.value = displayName;
+          selectedCityName = displayName; // Lưu tên thành phố đã chọn
+          
+          if (isDebugMode) {
+            debugSelected.textContent = selectedCityName;
+          }
+          
+          citySuggestions.classList.add("hidden");
+          fetchWeather(city.lat, city.lon);
+        });
+        
+        citySuggestions.appendChild(cityElement);
+      });
+      
+      citySuggestions.classList.remove("hidden");
+    }
+
+    // Cập nhật giao diện với dữ liệu thời tiết
+    function updateUI(d) {
+      errorMsg.classList.add("hidden");
+      weatherCard.classList.remove("hidden");
+      
+      iconEl.src = `https://openweathermap.org/img/wn/${d.weather[0].icon}@4x.png`;
+      iconEl.alt = d.weather[0].description;
+      
+      // Sử dụng tên thành phố đã chọn nếu có, nếu không thì dùng dữ liệu từ API
+      const apiLocationName = `${d.name}, ${d.sys.country}`;
+      if (selectedCityName) {
+        locEl.textContent = selectedCityName;
+      } else {
+        locEl.textContent = apiLocationName;
+      }
+      
+      if (isDebugMode) {
+        debugAPI.textContent = apiLocationName;
+      }
+      
+      // Dịch mô tả thời tiết sang tiếng Việt
+      const translatedDescription = translateWeatherDescription(d.weather[0].description);
+      descEl.textContent = translatedDescription;
+      
+      tempEl.textContent = Math.round(d.main.temp);
+      feelsLikeEl.textContent = Math.round(d.main.feels_like);
+      humidityEl.textContent = d.main.humidity;
+      windEl.textContent = d.wind.speed;
+      visibilityEl.textContent = d.visibility ? Math.round(d.visibility / 1000) : 'N/A';
+      pressureEl.textContent = d.main.pressure;
+      sunriseEl.textContent = formatTime(d.sys.sunrise);
+      sunsetEl.textContent = formatTime(d.sys.sunset);
+      lastUpdEl.textContent = `🕒 Cập nhật lúc: ${new Date().toLocaleTimeString('vi-VN')}`;
+
+      currentLat = d.coord.lat;
+      currentLon = d.coord.lon;
+      
+      // Thêm hiệu ứng mượt khi cập nhật
+      weatherCard.style.opacity = '0';
+      setTimeout(() => {
+        weatherCard.style.opacity = '1';
+      }, 100);
+    }
+
+    // Hiển thị thông báo lỗi
+    function displayError(msg) {
+      weatherCard.classList.add("hidden");
+      errorMsg.textContent = msg;
+      errorMsg.classList.remove("hidden");
+      
+      // Tự động ẩn lỗi sau 5 giây
+      setTimeout(() => {
+        errorMsg.classList.add("hidden");
+      }, 5000);
+    }
+
+    // Ẩn gợi ý khi click bên ngoài
+    document.addEventListener("click", (e) => {
+      if (!e.target.closest("#cityInput") && !e.target.closest("#citySuggestions")) {
+        citySuggestions.classList.add("hidden");
+      }
+    });
+
+    // Tự động cập nhật mỗi 10 phút nếu có tọa độ
+    setInterval(() => {
+      if (currentLat && currentLon) {
+        fetchWeather(currentLat, currentLon);
+      }
+    }, 600_000); // 600k ms = 10 phút
+
+    // Event listeners với chức năng cải tiến
+    searchBtn.addEventListener("click", () => {
+      const city = cityInput.value.trim();
+      if (city) {
+        citySuggestions.classList.add("hidden");
+        fetchWeatherByCity(city);
+      } else {
+        displayError("🔍 Vui lòng nhập tên thành phố");
+      }
+    });
+
+    locationBtn.addEventListener("click", () => {
+      if (navigator.geolocation) {
+        locationBtn.innerHTML = '<div class="loading-spinner"></div>';
+        navigator.geolocation.getCurrentPosition(
+          pos => {
+            selectedCityName = null; // Reset tên thành phố đã chọn cho geolocation
+            if (isDebugMode) {
+              debugSelected.textContent = "Đang sử dụng vị trí hiện tại";
+            }
+            fetchWeather(pos.coords.latitude, pos.coords.longitude);
+            locationBtn.innerHTML = '📍';
+          },
+          err => {
+            locationBtn.innerHTML = '📍';
+            displayError("❌ Không thể truy cập vị trí của bạn. Vui lòng cho phép truy cập vị trí hoặc tìm kiếm thủ công.");
+          }
+        );
+      } else {
+        displayError("❌ Trình duyệt không hỗ trợ định vị GPS");
+      }
+    });
+
+    cityInput.addEventListener("keypress", (e) => {
+      if (e.key === "Enter") {
+        citySuggestions.classList.add("hidden");
+        searchBtn.click();
+      }
+    });
+
+    // Tìm kiếm thành phố thời gian thực với debouncing (300ms)
+    cityInput.addEventListener("input", (e) => {
+      clearTimeout(debounceTimer);
+      const query = e.target.value.trim();
+      
+      if (query.length < 2) {
+        citySuggestions.classList.add("hidden");
+        return;
+      }
+      
+      debounceTimer = setTimeout(() => {
+        searchCities(query);
+      }, 300); // 300ms debounce
+    });
+
+    // Thêm hiệu ứng phát sáng khi focus input
+    cityInput.addEventListener("focus", () => {
+      const inputGlow = document.getElementById("inputGlow");
+      if (inputGlow) {
+        inputGlow.style.opacity = "1";
+      }
+      const query = cityInput.value.trim();
+      if (query.length >= 2) {
+        searchCities(query);
+      }
+    });
+
+    cityInput.addEventListener("blur", () => {
+      const inputGlow = document.getElementById("inputGlow");
+      if (inputGlow) {
+        inputGlow.style.opacity = "0";
+      }
+    });
+
+    // Thử geolocation khi tải trang
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        pos => {
+          selectedCityName = null; // Reset tên thành phố đã chọn cho geolocation
+          if (isDebugMode) {
+            debugSelected.textContent = "Đang sử dụng vị trí hiện tại";
+          }
+          fetchWeather(pos.coords.latitude, pos.coords.longitude);
+        },
+        err => {
+          console.warn("Quyền truy cập vị trí bị từ chối hoặc không khả dụng.");
+        }
+      );
+    }
+  </script>
+</body>
+</html>
